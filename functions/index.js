@@ -67,6 +67,17 @@ app.post('/scream', (req, res) => {
     });
 });
 
+const isEmpty = field => {
+  if (field.trim() === '') return true;
+  return false;
+};
+
+const isEmail = email => {
+  const regEx = /^(([^<>()\[\]\\.,;:\s@"]+(\.[^<>()\[\]\\.,;:\s@"]+)*)|(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/;
+  if (email.match(regEx)) return true;
+  return false;
+};
+
 // SIGNUP
 app.post('/signup', (req, res) => {
   let newUser = {
@@ -77,6 +88,29 @@ app.post('/signup', (req, res) => {
   };
 
   // VALIDATE DATA
+  let errors = {};
+
+  if (isEmpty(newUser.email)) {
+    errors.email = 'Email must not be empty';
+  } else if (!isEmail(newUser.email)) {
+    errors.email = 'Email is not valid';
+  }
+
+  if (isEmpty(newUser.password)) {
+    errors.password = 'Password cannot be empty';
+  }
+
+  if (isEmpty(newUser.handle)) {
+    errors.handle = 'Handle must not be empty';
+  }
+
+  if (newUser.password !== newUser.confirmPassword) {
+    errors.confirmPassword = 'Password must match';
+  }
+
+  if (Object.keys(errors).length > 0) return res.status(400).json(errors);
+
+  // CREATE USER DOC AND ISSUE A TOKEN
   let token, userId;
   db.doc(`/users/${newUser.handle}`)
     .get()
@@ -110,6 +144,43 @@ app.post('/signup', (req, res) => {
       const errorMessage = error.message;
       if (errorCode === 'auth/email-already-in-use') {
         return res.status(400).json({ message: 'Email already exists!' });
+      }
+      return res.status(500).json({ error: errorCode, errorMessage });
+    });
+});
+
+// LOGIN
+app.post('/login', (req, res) => {
+  let user = {
+    email: req.body.email,
+    password: req.body.password
+  };
+
+  // VALIDATE DATA
+  let errors = {};
+
+  if (isEmpty(user.email)) {
+    errors.email = 'Email must not be empty';
+  } else if (!isEmail(user.email)) {
+    errors.email = 'Email is not valid';
+  }
+
+  if (isEmpty(user.password)) {
+    errors.password = 'Password cannot be empty';
+  }
+
+  if (Object.keys(errors).length > 0) return res.status(400).json(errors);
+
+  firebase
+    .auth()
+    .signInWithEmailAndPassword(user.email, user.password)
+    .then(data => data.user.getIdToken())
+    .then(token => res.status(200).json({ token }))
+    .catch(error => {
+      const errorCode = error.code;
+      const errorMessage = error.message;
+      if (errorCode === 'auth/wrong-password') {
+        return res.status(403).json({ message: 'Forbidden access 😡' });
       }
       return res.status(500).json({ error: errorCode, errorMessage });
     });
